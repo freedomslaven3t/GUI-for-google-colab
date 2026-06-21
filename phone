@@ -1,0 +1,220 @@
+import os
+import ipywidgets as widgets
+from IPython.display import display, clear_output
+from datetime import datetime
+
+# =========================================================
+# 🧠 KERNEL LEVE
+# =========================================================
+
+STATE = {
+    "cwd": os.getcwd(),
+    "tab": "home"
+}
+
+def now():
+    return datetime.now().strftime("%H:%M:%S")
+
+# =========================================================
+# 📁 FILE SYSTEM (REAL do Colab)
+# =========================================================
+
+def ls():
+    try:
+        return sorted(os.listdir(STATE["cwd"]))
+    except:
+        return []
+
+def cd(path):
+    try:
+        os.chdir(path)
+        STATE["cwd"] = os.getcwd()
+    except:
+        pass
+
+def cat(path):
+    try:
+        with open(path, "r") as f:
+            return f.read()[:1500]
+    except:
+        return "❌ erro"
+
+# =========================================================
+# 📱 UI MOBILE (compacta)
+# =========================================================
+
+title = widgets.HTML("<h3>📱 Colab MobileOS</h3>")
+path = widgets.HTML()
+
+out = widgets.Output()
+
+# =========================================================
+# 📁 FILE VIEW (TOUCH FRIENDLY)
+# =========================================================
+
+def render_files():
+    items = ls()
+
+    buttons = []
+
+    for item in items[:40]:
+        full = os.path.join(STATE["cwd"], item)
+
+        icon = "📁" if os.path.isdir(full) else "📄"
+
+        btn = widgets.Button(
+            description=f"{icon} {item}",
+            layout=widgets.Layout(width="100%")
+        )
+
+        def on_click(x, p=full, is_dir=os.path.isdir(full)):
+            if is_dir:
+                cd(p)
+                refresh()
+            else:
+                show_file(p)
+
+        btn.on_click(on_click)
+        buttons.append(btn)
+
+    return widgets.VBox(buttons)
+
+# =========================================================
+# 📄 FILE VIEWER (light)
+# =========================================================
+
+file_out = widgets.Output()
+
+def show_file(path):
+    with file_out:
+        clear_output()
+        print("📄", path)
+        print("-"*30)
+        print(cat(path))
+
+# =========================================================
+# 🖥️ TERMINAL (mobile minimal)
+# =========================================================
+
+term_in = widgets.Text(placeholder="ls | cd | pwd | cat")
+
+term_out = widgets.Output()
+
+def run(cmd):
+    parts = cmd.split()
+    if not parts:
+        return
+
+    c = parts[0]
+    a = parts[1:]
+
+    with term_out:
+        print("$", cmd)
+
+        if c == "ls":
+            print("\n".join(ls()[:30]))
+
+        elif c == "pwd":
+            print(STATE["cwd"])
+
+        elif c == "cd":
+            if a:
+                cd(a[0])
+
+        elif c == "cat":
+            if a:
+                print(cat(a[0]))
+
+        print("-"*20)
+
+def on_enter(_):
+    run(term_in.value)
+    term_in.value = ""
+
+term_in.on_submit(on_enter)
+
+# =========================================================
+# 🔄 REFRESH SYSTEM (quase “vivo”)
+# =========================================================
+
+def refresh(_=None):
+    STATE["cwd"] = os.getcwd()
+    path.value = f"📍 {STATE['cwd']}  🕒 {now()}"
+
+    global file_view
+    file_view.children = [render_files()]
+
+# botão “pull to refresh”
+refresh_btn = widgets.Button(description="🔄 atualizar", layout=widgets.Layout(width="100%"))
+refresh_btn.on_click(refresh)
+
+# =========================================================
+# 🧭 NAVIGATION (mobile tabs simples)
+# =========================================================
+
+btn_home = widgets.Button(description="🏠")
+btn_files = widgets.Button(description="📁")
+btn_term = widgets.Button(description="🖥️")
+
+nav = widgets.HBox([btn_home, btn_files, btn_term])
+
+def home(_):
+    STATE["tab"] = "home"
+    render()
+
+def files(_):
+    STATE["tab"] = "files"
+    refresh()
+
+def term(_):
+    STATE["tab"] = "term"
+    render()
+
+btn_home.on_click(home)
+btn_files.on_click(files)
+btn_term.on_click(term)
+
+# =========================================================
+# 📱 LAYOUT ROOT
+# =========================================================
+
+file_view = widgets.VBox()
+
+app = widgets.VBox()
+
+def render():
+    if STATE["tab"] == "home":
+        app.children = [
+            title,
+            nav,
+            path,
+            refresh_btn,
+            widgets.HTML("<b>📌 Home</b>"),
+        ]
+
+    elif STATE["tab"] == "files":
+        app.children = [
+            title,
+            nav,
+            path,
+            refresh_btn,
+            file_view,
+            file_out
+        ]
+
+    elif STATE["tab"] == "term":
+        app.children = [
+            title,
+            nav,
+            path,
+            term_in,
+            term_out
+        ]
+
+# =========================================================
+# 🚀 START
+# =========================================================
+
+refresh()
+render()
+display(app)
