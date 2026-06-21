@@ -1,0 +1,267 @@
+import os
+import time
+import uuid
+import ipywidgets as widgets
+from IPython.display import display, clear_output
+from datetime import datetime
+
+# =========================================================
+# 🧠 KERNEL (simulação estilo Linux)
+# =========================================================
+
+KERNEL = {
+    "cwd": os.getcwd(),
+    "user": "colab",
+    "hostname": "colab-debian",
+    "processes": [],
+    "history": [],
+    "memory": 42,
+    "cpu": 7
+}
+
+# =========================================================
+# 🧰 SYSTEM HELPERS
+# =========================================================
+
+def now():
+    return datetime.now().strftime("%H:%M:%S")
+
+def log(msg):
+    KERNEL["history"].append(f"[{now()}] {msg}")
+    if len(KERNEL["history"]) > 200:
+        KERNEL["history"].pop(0)
+
+def prompt():
+    return f"{KERNEL['user']}@{KERNEL['hostname']}:{KERNEL['cwd']}$"
+
+# =========================================================
+# 📁 FAKE FILE SYSTEM (Debian-like structure)
+# =========================================================
+
+def ls():
+    try:
+        return os.listdir(KERNEL["cwd"])
+    except:
+        return []
+
+def cd(path):
+    try:
+        os.chdir(path)
+        KERNEL["cwd"] = os.getcwd()
+        return "ok"
+    except Exception as e:
+        return str(e)
+
+def cat(path):
+    try:
+        with open(path, "r") as f:
+            return f.read()
+    except Exception as e:
+        return str(e)
+
+def mkdir(name):
+    try:
+        os.mkdir(name)
+        return "created"
+    except Exception as e:
+        return str(e)
+
+def touch(name):
+    try:
+        with open(name, "w") as f:
+            f.write("")
+        return "created"
+    except Exception as e:
+        return str(e)
+
+# =========================================================
+# ⚙️ PROCESS SYSTEM (fake ps/top)
+# =========================================================
+
+def spawn_process(name):
+    pid = str(uuid.uuid4())[:6]
+    KERNEL["processes"].append({
+        "pid": pid,
+        "name": name,
+        "time": now()
+    })
+    return pid
+
+def ps():
+    return KERNEL["processes"]
+
+# =========================================================
+# 🧠 SHELL ENGINE (Debian-like CLI)
+# =========================================================
+
+def execute(cmd):
+    log(cmd)
+    parts = cmd.split()
+    if not parts:
+        return ""
+
+    c = parts[0]
+    a = parts[1:]
+
+    if c == "ls":
+        return "\n".join(ls())
+
+    if c == "pwd":
+        return KERNEL["cwd"]
+
+    if c == "cd":
+        return cd(a[0]) if a else "usage: cd <dir>"
+
+    if c == "cat":
+        return cat(a[0]) if a else "usage: cat <file>"
+
+    if c == "mkdir":
+        return mkdir(a[0]) if a else "usage: mkdir <name>"
+
+    if c == "touch":
+        return touch(a[0]) if a else "usage: touch <name>"
+
+    if c == "ps":
+        return "\n".join([f"{p['pid']} {p['name']} {p['time']}" for p in ps()])
+
+    if c == "run":
+        pid = spawn_process(" ".join(a))
+        return f"process started PID={pid}"
+
+    if c == "clear":
+        KERNEL["history"] = []
+        return ""
+
+    return "command not found"
+
+# =========================================================
+# 🖥️ UI COMPONENTS (Debian GNOME style fake)
+# =========================================================
+
+title = widgets.HTML("<h2>🐧 Colab Debian MiniOS</h2>")
+
+status_bar = widgets.HTML()
+
+terminal_out = widgets.Output()
+
+file_out = widgets.Output()
+
+proc_out = widgets.Output()
+
+cmd = widgets.Text(
+    placeholder="type command...",
+    description="shell:"
+)
+
+# =========================================================
+# 📁 FILE MANAGER (Debian style click tree)
+# =========================================================
+
+def render_files():
+    with file_out:
+        clear_output()
+        print("📁 FILE SYSTEM")
+        print("--------------")
+        for f in ls():
+            full = os.path.join(KERNEL["cwd"], f)
+            icon = "📁" if os.path.isdir(full) else "📄"
+            print(f"{icon} {f}")
+
+# =========================================================
+# ⚙️ PROCESS VIEW (like htop-lite)
+# =========================================================
+
+def render_processes():
+    with proc_out:
+        clear_output()
+        print("⚙️ PROCESSES")
+        print("------------")
+        for p in ps():
+            print(f"{p['pid']} | {p['name']} | {p['time']}")
+
+# =========================================================
+# 🖥️ TERMINAL
+# =========================================================
+
+def run_cmd(_=None):
+    c = cmd.value
+    cmd.value = ""
+
+    out = execute(c)
+
+    with terminal_out:
+        print(prompt() + " " + c)
+        print(out)
+        print("")
+
+    refresh()
+
+# =========================================================
+# 🔄 RENDER SYSTEM (fake compositor)
+# =========================================================
+
+def refresh():
+    KERNEL["cwd"] = os.getcwd()
+
+    status_bar.value = (
+        f"🐧 {KERNEL['user']} | 📍 {KERNEL['cwd']} | "
+        f"🧠 CPU {KERNEL['cpu']}% | 💾 RAM {KERNEL['memory']}%"
+    )
+
+    render_files()
+    render_processes()
+
+# =========================================================
+# 🪟 TASKBAR (GNOME-like)
+# =========================================================
+
+btn_run = widgets.Button(description="run", button_style="success")
+btn_ps = widgets.Button(description="ps")
+btn_clear = widgets.Button(description="clear")
+
+btn_run.on_click(run_cmd)
+
+def open_ps(_):
+    with proc_out:
+        clear_output()
+        render_processes()
+
+btn_ps.on_click(open_ps)
+
+def clear_terminal(_):
+    with terminal_out:
+        clear_output()
+
+btn_clear.on_click(clear_terminal)
+
+# ENTER exec
+cmd.on_submit(run_cmd)
+
+taskbar = widgets.HBox([btn_run, btn_ps, btn_clear])
+
+# =========================================================
+# 🖥️ LAYOUT (Debian desktop simulation)
+# =========================================================
+
+left = widgets.VBox([widgets.HTML("<b>📁 Files</b>"), file_out])
+center = widgets.VBox([widgets.HTML("<b>🖥️ Terminal</b>"), cmd, taskbar, terminal_out])
+right = widgets.VBox([widgets.HTML("<b>⚙️ Processes</b>"), proc_out])
+
+desktop = widgets.HBox([left, center, right])
+
+ui = widgets.VBox([title, status_bar, desktop])
+
+# =========================================================
+# 🚀 BOOT SEQUENCE (Linux-like)
+# =========================================================
+
+print("Booting Colab Debian MiniOS...")
+time.sleep(0.3)
+print("Loading kernel...")
+time.sleep(0.3)
+print("Starting services...")
+time.sleep(0.3)
+print("Ready.\n")
+
+refresh()
+display(ui)
