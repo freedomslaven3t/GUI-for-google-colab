@@ -1,1 +1,1 @@
-# GUI-for-google-colab
+MINI "GUI" FOR GOOGLE COLAB
